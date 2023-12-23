@@ -19,9 +19,12 @@ class Board:
         for row in self.board:
             print(' '.join(row))
 
-    def make_move(self, piece_row, piece_col, new_row, new_col):
-        self.board[new_row][new_col] = self.board[piece_row][piece_col]
+    def make_move(self, piece_row, piece_col, new_row, new_col, promotion_piece):
+        piece = self.board[piece_row][piece_col]
+        if promotion_piece:
+            piece = promotion_piece
         self.board[piece_row][piece_col] = ' '
+        self.board[new_row][new_col] = piece # also we are deleting the enemy piece if it is a capture move
         if self._is_castling_move(piece_row, piece_col, new_col): 
             rook_row = new_rook_row = piece_row
             if new_col == 2: 
@@ -68,11 +71,11 @@ class Board:
                 break    
         # checks if it is stalemate or checkmate
         if all_adjacent_cells_are_under_attack:
-            if self._is_king_in_check(king_row, king_col) and self._any_allied_piece_can_shield_the_king(king_row, king_col) or \
+            if self._is_king_in_check(king_row, king_col) and not self._an_allied_piece_can_shield_the_king(king_row, king_col) or \
               self._is_king_in_double_check(king_row, king_col):  
                 print('Checkmate!')
                 return True   
-            elif not self._is_king_in_check(king_row, king_col) and self._is_allied_pieces_frozen(only_king_left, king_row, king_col): 
+            elif not self._is_king_in_check(king_row, king_col) and self._are_allied_pieces_frozen(only_king_left, king_row, king_col): 
                 print('Stalemate!')
                 return True
         return False    
@@ -84,11 +87,8 @@ class Board:
         # checks if the new square is not occupied by allied pieces
         if turn == 1 and end_square.isupper() or turn == 2 and end_square.islower():
             return False
-        # checks if the king is unattacked next
-        if self._is_king_in_check(new_row, new_col):
-            return False
-        # checks that if the piece is not a horse, then the path to the new position must be clear
-        if piece.upper() != 'H' and self._is_path_dirty(piece_row, piece_col, new_row, new_col):
+        # checks if the king is unattacked next and the path to the new position is clear
+        if self._is_king_in_check(new_row, new_col) or self._is_path_dirty(piece_row, piece_col, new_row, new_col):
             return False
         # checks that if the piece is a pawn and the move is a capture on the go, then the last opponent move must be a double pawn move  
         is_move_capture_on_the_go = piece.upper() == 'P' and piece_col != new_col and end_square == ' '
@@ -117,7 +117,7 @@ class Board:
                 is_rook_already_moved = is_rook_right_already_moved
             if self._is_king_in_check(piece_row, piece_col) or \
                is_king_already_moved or is_rook_already_moved or \
-               self._is_castling_path_insecure(piece_row, piece_col, rook_row, rook_col) or \
+               self._is_castling_path_insecure(piece_row, piece_col, rook_col) or \
                self._is_path_dirty(piece_row, piece_col, rook_row, rook_col):
                 return False
         return True
@@ -127,34 +127,120 @@ class Board:
     def _is_castling_move(self, piece_row, piece_col, new_col):
         # checks if it is a king double move
         return (self.board[piece_row][piece_col]).lower() == 'k' and abs(piece_col - new_col) == 2
-
-    def _is_castling_path_insecure(self, piece_row, piece_col, new_row, new_col):
+    
+    def _is_castling_path_insecure(self, piece_row, piece_col, new_col):
         # checks if the cells of the king path is attacked by an enemy piece
-        pass
-
-    def _is_path_dirty(self, piece_row, piece_col, new_row, new_col):
-        # checks if there are pieces in the cells of the piece path
-        pass
+        start_col, end_col = (piece_col, new_col) if new_col < piece_col else (new_col, piece_col)
+        path_cells = [
+            (piece_row, col) 
+            for col in range(start_col + 1, end_col)
+        ]
+        return any(
+            self._is_cell_under_attack(row, col, self.turn % 2 + 1) 
+            for row, col in path_cells
+        )
 
     def _is_king_in_check(self, king_row, king_col):
         # checks if the king is attacked by an enemy piece
-        pass
+        return self._is_cell_under_attack(king_row, king_col, self.turn % 2 + 1)
+    
+    def _is_cell_under_attack(self, row, col, attacker_turn):
+        # checks if a specific cell is under attack by an enemy piece
+        return any(
+            self.rules.is_piece_move(self.board[i][j], i, j, row, col)
+                   for i in range(8) 
+                    for j in range(8)
+                        if self.turn != attacker_turn and self.board[i][j] != ' '
+        )    
 
     def _is_king_in_double_check(self, king_row, king_col):
-        # checks if the king is attacked by two enemy pieces
+        # gets the color of the enemy pieces
+        king = self.board[king_row][king_col]
+        enemy_color = 1 if king.islower() else 2 # white is 1
+        # checks if the king is attacked by one enemy piece
+        if self._is_king_in_check(king_row, king_col):
+            # iterates over all enemy pieces to check for a second attack
+            for row in range(8):
+                for col in range(8):
+                    square = self.board[row][col]
+                    if square != ' ' and (row != king_row or col != king_col) and \
+                     (square.isupper() and enemy_color == 1 or square.islower() and enemy_color == 2): 
+                        if self.rules.is_piece_move(square, row, col, king_row, king_col):
+                            return True
+        return False
+
+    def _is_path_dirty(self, piece_row, piece_col, new_row, new_col):
+        # checks if there are pieces in the cells of the piece path
+        piece = self.board[piece_row][piece_col]
+        if piece.upper() == 'R':
+            return self._is_rook_path_dirty(piece_row, piece_col, new_row, new_col)
+        elif piece.upper() == 'B':
+            return self._is_bishop_path_dirty(piece_row, piece_col, new_row, new_col)
+        elif piece.upper() == 'Q':
+            return self._is_rook_path_dirty(piece_row, piece_col, new_row, new_col) or \
+                   self._is_bishop_path_dirty(piece_row, piece_col, new_row, new_col)
+        else: # piece.upper() == K, H, P
+            return False
+
+    def _is_rook_path_dirty(self, piece_row, piece_col, new_row, new_col):
+        # checks if there are pieces in the cells of the rook path
+        path_cells = []
+        start_row, end_row = (piece_row, new_row) if new_row < piece_row else (new_row, piece_row)
+        if start_row == end_row: # horizontal move
+            start_col, end_col = (piece_col, new_col) if new_col < piece_col else (new_col, piece_col)
+            path_cells = [
+                (piece_row, col) 
+                for col in range(start_col + 1, end_col)
+            ]
+        else: # vertical move
+            path_cells = [
+                (row, piece_col) 
+                for row in range(start_row + 1, end_row)
+            ]
+        return any(
+            self.board[row][col] != ' '
+            for row, col in path_cells
+        )
+    
+    def _is_bishop_path_dirty(self, piece_row, piece_col, new_row, new_col):
+        # checks if there are pieces in the cells of the bishop path
+        row_direction = 1 if new_row > piece_row else -1
+        col_direction = 1 if new_col > piece_col else -1
+        current_row, current_col = piece_row + row_direction, piece_col + col_direction
+        while (current_row, current_col) != (new_row, new_col):
+            if self.board[current_row][current_col] != ' ':
+                return True
+            current_row += row_direction
+            current_col += col_direction
+        return False
+
+    def _are_allied_pieces_frozen(self, only_king_left, king_row, king_col):
+        if only_king_left:
+            return True
+        # checks if all remaining pieces are a shield to the king or there are only pawns and are all locked
+        for row in range(8):
+            for col in range(8):
+                piece = self.board[row][col]
+                if piece != ' ':
+                    if self._is_player_piece(piece):
+                        if not self._is_piece_a_king_shield(row, col, king_row, king_col) or \
+                          not piece.upper() == 'P' or not self._is_pawn_locked(row, col):
+                            return False
+        return True
+              
+    def _is_piece_a_king_shield(self, row, col, king_row, king_col):
+        # checks if a piece is protecting the king from an enemy piece
         pass
 
-    def _is_allied_pieces_frozen(self, only_king_left, king_row, king_col):
-        # only the king left OR
-        # remaining pieces are shield OR 
-        # there are only pawns and are all stucked
+    def _is_pawn_locked(self, pawn_row, pawn_col):
+        # checks if a pawn is locked by enemy pieces
         pass
-
-    def _any_allied_piece_can_shield_the_king(self, king_row, king_col):
-        # checks if there is an allied piece that can move to a cell that intercepts the king attack
+    
+    def _an_allied_piece_can_shield_the_king(self, king_row, king_col):
+        # checks if any piece can move to a cell that intercepts the king attack
         pass
-
-
+                  
+    
 class Rules:
     def is_piece_move(self, piece, piece_row, piece_col, new_row, new_col):
         # rememeber pieces basic rules
@@ -232,6 +318,15 @@ class Gameplay:
             except ValueError:
                 print('Invalid input format: not a number')
                 continue
+            promotion_piece = None
+            # checks if it is a pawn promotion move             
+            if piece.upper() == 'P' and (new_row == 0 or new_row == 7):
+                while True:
+                    promotion_piece = input('Enter promotion piece (Q, R, B, or H): ')
+                    if promotion_piece in ['Q', 'R', 'B', 'H']:
+                        break
+                    else:
+                        print('Invalid promotion piece. Please enter Q, R, B, or H.')
             if self._is_valid_input(piece_row, piece_col, new_row, new_col):
                 piece = self.board.board[piece_row][piece_col]
                 if piece != ' ' and self._is_player_piece(piece):
@@ -248,7 +343,7 @@ class Gameplay:
                         # checks if it is a legal move
                         if self.board.is_legal_move(self.rules, self.turn, piece_row, piece_col, new_row, new_col, self.last_move, \
                           is_king_already_moved, is_rook_left_already_moved, is_rook_right_already_moved):
-                            self.board.make_move(piece_row, piece_col, new_row, new_col) # board update
+                            self.board.make_move(piece_row, piece_col, new_row, new_col, promotion_piece) # board update
                             self.board.display() # board ui refresh
                             self.turn = (self.turn % 2) + 1 # player update
                             # king and rook stats update
