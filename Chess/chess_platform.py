@@ -141,7 +141,7 @@ class Board:
             self._is_cell_under_attack(turn, king_row, king_col) 
             for king_row, king_col in path_cells
         )
-    
+      
     def _is_king_in_check(self, turn, king_row, king_col, rules):
         # checks if the king is attacked by an enemy piece
         return self._is_cell_under_attack(turn, king_row, king_col, rules)
@@ -467,7 +467,7 @@ class Gameplay:
 
     def _is_player_piece(self, piece):  
         return self.turn == 1 and piece.isupper() or self.turn == 2 and piece.islower()
-    
+
     def get_king_position_in_board(self):
         board = self.chess_board.board
         king_piece = 'K' if self.turn == 1 else 'k'
