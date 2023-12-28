@@ -16,7 +16,7 @@ class Board:
         ] # white 
 
     def display(self):
-        print('black')
+        print('\nblack')
         for row in self.board:
             print(' '.join(row))
         print('white')	
@@ -90,7 +90,7 @@ class Board:
         if turn == 1 and end_square.isupper() or turn == 2 and end_square.islower():
             return False
         # checks if the king is unattacked next and the path to the new position is clear
-        if self._is_king_in_check(turn, new_row, new_col, rules) or self._is_path_dirty(piece_row, piece_col, new_row, new_col):
+        if self._is_path_dirty(piece_row, piece_col, new_row, new_col) or self._is_king_in_check(turn, new_row, new_col, rules):
             return False
         # checks that if the piece is a pawn and the move is a capture on the go, then the last opponent move must be a double pawn move  
         is_move_capture_on_the_go = piece.upper() == 'P' and piece_col != new_col and end_square == '#'
@@ -99,7 +99,7 @@ class Board:
                 last_enemy_piece_row, last_enemy_piece_col, last_enemy_new_row, last_enemy_new_col = enemy_last_move
                 enemy_move_direction = -1 if piece.islower() else 1
                 if not rules.is_double_pawn_move(enemy_move_direction, last_enemy_piece_row, last_enemy_piece_col, last_enemy_new_row, last_enemy_new_col):
-                    return False
+                    return False     
             return False
         # checks that if it is a castling move, then:
         if self._is_castling_move(piece_row, piece_col, new_col):
@@ -117,10 +117,10 @@ class Board:
             else:
                 rook_col = 7
                 is_rook_already_moved = is_rook_right_already_moved
-            if self._is_king_in_check(turn, piece_row, piece_col, rules) or \
-               is_king_already_moved or is_rook_already_moved or \
-               self._is_castling_path_insecure(turn, piece_row, piece_col, rook_col) or \
-               self._is_path_dirty(piece_row, piece_col, rook_row, rook_col):
+            if self._is_path_dirty(piece_row, piece_col, rook_row, rook_col) or \
+              self._is_castling_path_insecure(turn, piece_row, piece_col, rook_col) or \
+              self._is_king_in_check(turn, piece_row, piece_col, rules) or \
+              is_king_already_moved or is_rook_already_moved:
                 return False
         return True
     
@@ -141,22 +141,22 @@ class Board:
             self._is_cell_under_attack(turn, king_row, king_col) 
             for king_row, king_col in path_cells
         )
-
+      
     def _is_king_in_check(self, turn, king_row, king_col, rules):
         # checks if the king is attacked by an enemy piece
         return self._is_cell_under_attack(turn, king_row, king_col, rules)
-    
+
     def _is_cell_under_attack(self, turn, row, col, rules):
         # checks if a specific cell is under attack by an enemy piece
+        enemy_turn = 1 if turn == 2 else 2  
         return any(
-            rules.is_piece_move(self.board[i][j], i, j, row, col)
-                for i in range(8) 
-                    for j in range(8)
-                        if turn != (1 if self.board[i][j].isupper() else 2) and self.board[i][j] != '#'
-        )    
+            rules.is_piece_move(self.board[i][j], i, j, row, col) and turn == enemy_turn
+            for i in range(8)
+                for j in range(8)
+                    if self.board[i][j] != '#'
+        )
 
     def _is_king_in_double_check(self, king_row, king_col, rules):
-        # gets the color of the enemy pieces
         king = self.board[king_row][king_col]
         turn = 1 if king.isupper() else 2 # white is 1
         # checks if the king is attacked by one enemy piece
@@ -164,10 +164,10 @@ class Board:
             # iterates over all enemy pieces to check for a second attack
             for row in range(8):
                 for col in range(8):
-                    square = self.board[row][col]
-                    if square != '#' and (row != king_row or col != king_col) and \
-                     (square.isupper() and (turn % 2)+1 == 1 or square.islower() and (turn % 2)+1 == 2): 
-                        if self.rules.is_piece_move(square, row, col, king_row, king_col):
+                    if square != '#' and (row, col) != (king_row, king_col):
+                        square = self.board[row][col]
+                        enemy_turn = 1 if square.islower() else 2
+                        if turn != enemy_turn and self.rules.is_piece_move(square, row, col, king_row, king_col):
                             return True
         return False
     
@@ -385,7 +385,7 @@ class Rules:
 class Gameplay:
     def __init__(self):
         self.rules = Rules()
-        self.board = Board()
+        self.chess_board = Board()
         self.turn = 1 # white turn
         self.last_move = None
         self.is_white_king_already_moved = self.is_black_king_already_moved = \
@@ -393,11 +393,13 @@ class Gameplay:
         self.is_black_left_rook_already_moved = self.is_black_right_rook_already_moved = False
 
     def play(self):
-        self.board.display()
-        while not self.board.is_game_over(self.turn, self.rules, self.last_move):
+        while not self.chess_board.is_game_over(self.turn, self.rules, self.last_move):
+            king_position = self.get_king_position_in_board()
+            if self.board.is_king_in_check(self.turn, *king_position, self.rules):
+                print('Check!')
             try:
-                print('')
-                piece_row = int(input('Piece row: ')) - 1
+                self.chess_board.display() # board ui refresh
+                piece_row = int(input('\nPiece row: ')) - 1
                 piece_col = int(input('Piece column: ')) - 1
                 new_row = int(input('Piece new row: ')) - 1
                 new_col = int(input('Piece new column: ')) - 1
@@ -405,20 +407,20 @@ class Gameplay:
                 print('Invalid input format: not a number')
                 continue
             promotion_piece = None
-            # checks if it is a pawn promotion move             
-            if piece.upper() == 'P' and (new_row == 0 or new_row == 7):
-                while True:
-                    promotion_piece = input('Enter promotion piece (Q, R, B, or H): ')
-                    if promotion_piece in ['Q', 'R', 'B', 'H']:
-                        break
-                    else:
-                        print('Invalid promotion piece. Please enter Q, R, B, or H.')
+            # checks if it is a pawn promotion move
             if self._is_valid_input(piece_row, piece_col, new_row, new_col):
-                piece = self.board.board[piece_row][piece_col]
+                piece = self.chess_board.board[piece_row][piece_col]             
+                if piece.upper() == 'P' and (new_row == 0 or new_row == 7):
+                    while True:
+                        promotion_piece = input('Enter promotion piece (Q, R, B, or H): ')
+                        if promotion_piece in ['Q', 'R', 'B', 'H']:
+                            break
+                        else:
+                            print('Invalid promotion piece. Please enter Q, R, B, or H.')
                 if piece != '#' and self._is_player_piece(piece):
                     if self.rules.is_piece_move(piece, piece_row, piece_col, new_row, new_col):
                         # get king and rook stats
-                        if self.turn == 1:
+                        if self.turn == 1:  
                             is_king_already_moved = self.is_white_king_already_moved
                             is_rook_left_already_moved = self.is_white_left_rook_already_moved
                             is_rook_right_already_moved = self.is_white_right_rook_already_moved
@@ -427,10 +429,9 @@ class Gameplay:
                             is_rook_left_already_moved = self.is_black_left_rook_already_moved
                             is_rook_right_already_moved = self.is_black_right_rook_already_moved
                         # checks if it is a legal move
-                        if self.board.is_legal_move(self.rules, self.turn, piece_row, piece_col, new_row, new_col, self.last_move, \
+                        if self.chess_board.is_legal_move(self.rules, self.turn, piece_row, piece_col, new_row, new_col, self.last_move, \
                           is_king_already_moved, is_rook_left_already_moved, is_rook_right_already_moved):
-                            self.board.make_move(piece_row, piece_col, new_row, new_col, promotion_piece) # board update
-                            self.board.display() # board ui refresh
+                            self.chess_board.make_move(piece_row, piece_col, new_row, new_col, promotion_piece) # board update
                             self.turn = (self.turn % 2) + 1 # player update
                             # king and rook stats update
                             if piece == 'K' and not self.is_white_king_already_moved:
@@ -466,4 +467,11 @@ class Gameplay:
 
     def _is_player_piece(self, piece):  
         return self.turn == 1 and piece.isupper() or self.turn == 2 and piece.islower()
-    
+
+    def get_king_position_in_board(self):
+        board = self.chess_board.board
+        king_piece = 'K' if self.turn == 1 else 'k'
+        for row in range(len(board)):
+            for col in range(len(board[row])):
+                if board[row][col] == king_piece:
+                    return (row, col)
