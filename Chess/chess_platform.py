@@ -395,7 +395,7 @@ class Gameplay:
     def play(self):
         while not self.chess_board.is_game_over(self.turn, self.rules, self.last_move):
             king_position = self.get_king_position_in_board()
-            if self.board.is_king_in_check(self.turn, *king_position, self.rules):
+            if self.chess_board.is_king_in_check(self.turn, *king_position, self.rules):
                 print('Check!')
             try:
                 self.chess_board.display() # board ui refresh
