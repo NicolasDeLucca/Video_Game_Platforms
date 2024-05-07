@@ -1,7 +1,11 @@
 # Chess Platform development in Python
 
-class Board:
+class Board: 
     def __init__(self):
+        # colors
+        self.LIGHT_BROWN = '\033[48;2;218;165;32m'
+        self.LIGHT_BLUE = '\033[104m'
+        self.ENDC = '\033[0m'
           # black
         self.board = [
             # 0    1    2    3    4    5    6    7 
@@ -14,12 +18,22 @@ class Board:
             ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'], # 6
             ['R', 'H', 'B', 'Q', 'K', 'B', 'H', 'R']  # 7
         ] # white 
-
+    
     def display(self):
-        print('\nblack')
-        for row in self.board:
-            print(' '.join(row))
-        print('white')	
+        print('\n         black')
+        print('    1 2 3 4 5 6 7 8')
+        print('    ' + '--' * 8)
+        for i, row in enumerate(self.board, start=1):
+            print(i, '|', end=' ')
+            for j, piece in enumerate(row):
+                if (i + j) % 2 == 0:
+                    print(f"{self.LIGHT_BLUE}{piece}{self.ENDC}", end=' ')
+                else:
+                    print(f"{self.LIGHT_BROWN}{piece}{self.ENDC}", end=' ')
+            print()
+        print('    ' + '--' * 8)
+        print('    1 2 3 4 5 6 7 8')
+        print('         white')
 
     def make_move(self, piece_row, piece_col, new_row, new_col, promotion_piece):
         piece = self.board[piece_row][piece_col]
@@ -148,13 +162,13 @@ class Board:
 
     def _is_cell_under_attack(self, turn, row, col, rules):
         # checks if a specific cell is under attack by an enemy piece
-        enemy_turn = 1 if turn == 2 else 2  
+        is_enemy_piece = lambda pce: pce.islower() if turn == 1 else pce.isupper() 
         return any(
-            rules.is_piece_move(self.board[i][j], i, j, row, col) and turn == enemy_turn
+            rules.is_piece_move(self.board[i][j], i, j, row, col)
             for i in range(8)
                 for j in range(8)
-                    if self.board[i][j] != '#'
-        )
+                    if self.board[i][j] != '#' and is_enemy_piece(self.board[i][j])
+        )        
 
     def _is_king_in_double_check(self, king_row, king_col, rules):
         king = self.board[king_row][king_col]
@@ -258,28 +272,28 @@ class Board:
         return last_enemy_pawn_row == pawn_row and last_enemy_pawn_col == diagonal_col       
 
     def _an_allied_piece_can_shield_the_king(self, turn, king_row, king_col, rules):
-        attacker_piece = self._get_attacker_piece(turn, king_row, king_col)
+        attacker_piece = self._get_attacker_piece(turn, king_row, king_col, rules)
         for row in range(8):
             for col in range(8):
                 piece = self.board[row][col]
                 if piece != '#':
                     if turn == 1 and piece.isupper() or turn == 2 and piece.islower():
                         attacker_path = self._get_attacker_path(row, col, king_row, king_col, attacker_piece)
-                        if self._piece_can_intercept_the_attack(row, col, king_row, king_col, rules, attacker_path):
+                        if self._piece_can_intercept_the_attack(row, col, rules, attacker_path):
                             return True
         return False
 
-    # pre: the king is under attack
-    def _get_attacker_piece(self, turn, king_row, king_col):
+    def _get_attacker_piece(self, turn, king_row, king_col, rules):
         # identifies the first piece that is attacking the king
         for row in range(8):
             for col in range(8):
                 piece = self.board[row][col]
                 if piece != '#':
                     if turn == 1 and piece.islower() or turn == 2 and piece.isupper():
-                        if self.rules.is_piece_move(piece, row, col, king_row, king_col) and \
+                        if rules.is_piece_move(piece, row, col, king_row, king_col) and \
                            not self._is_path_dirty(row, col, king_row, king_col):
-                              return piece     
+                              return piece  
+        return '#'  
     
     def _get_attacker_path(self, piece_row, piece_col, king_row, king_col, attacker_piece):
         upper_attacker_piece = attacker_piece.upper()
