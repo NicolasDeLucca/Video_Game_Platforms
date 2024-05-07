@@ -1,12 +1,11 @@
 # Chess Platform development in Python
 
-class Colors:
-    LIGHT_BROWN = '\033[48;2;218;165;32m'
-    LIGHT_BLUE = '\033[104m'
-    ENDC = '\033[0m'
-
-class Board:
+class Board: 
     def __init__(self):
+        # colors
+        self.LIGHT_BROWN = '\033[48;2;218;165;32m'
+        self.LIGHT_BLUE = '\033[104m'
+        self.ENDC = '\033[0m'
           # black
         self.board = [
             # 0    1    2    3    4    5    6    7 
@@ -21,21 +20,20 @@ class Board:
         ] # white 
     
     def display(self):
-        print('         black')
+        print('\n         black')
         print('    1 2 3 4 5 6 7 8')
         print('    ' + '--' * 8)
         for i, row in enumerate(self.board, start=1):
             print(i, '|', end=' ')
             for j, piece in enumerate(row):
                 if (i + j) % 2 == 0:
-                    print(f"{Colors.LIGHT_BLUE}{piece}{Colors.ENDC}", end=' ')
+                    print(f"{self.LIGHT_BLUE}{piece}{self.ENDC}", end=' ')
                 else:
-                    print(f"{Colors.LIGHT_BROWN}{piece}{Colors.ENDC}", end=' ')
+                    print(f"{self.LIGHT_BROWN}{piece}{self.ENDC}", end=' ')
             print()
         print('    ' + '--' * 8)
         print('    1 2 3 4 5 6 7 8')
         print('         white')
-	
 
     def make_move(self, piece_row, piece_col, new_row, new_col, promotion_piece):
         piece = self.board[piece_row][piece_col]
